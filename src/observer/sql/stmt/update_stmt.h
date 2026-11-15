@@ -15,30 +15,39 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include "common/sys/rc.h"
+#include "common/value.h"
 #include "sql/stmt/stmt.h"
 
 class Table;
+class FieldMeta;
+class FilterStmt;
 
 /**
  * @brief 更新语句
  * @ingroup Statement
+ * @details 当前仅支持单字段更新，更新值为字面量，条件为 AND 连接的比较表达式
  */
 class UpdateStmt : public Stmt
 {
 public:
   UpdateStmt() = default;
-  UpdateStmt(Table *table, Value *values, int value_amount);
+  UpdateStmt(Table *table, const FieldMeta *field_meta, const Value &value, FilterStmt *filter_stmt);
+  ~UpdateStmt() override;
 
 public:
   static RC create(Db *db, const UpdateSqlNode &update_sql, Stmt *&stmt);
 
 public:
-  Table *table() const { return table_; }
-  Value *values() const { return values_; }
-  int    value_amount() const { return value_amount_; }
+  StmtType type() const override { return StmtType::UPDATE; }
+
+  Table           *table() const { return table_; }
+  const FieldMeta *field_meta() const { return field_meta_; }
+  const Value     &value() const { return value_; }
+  FilterStmt      *filter_stmt() const { return filter_stmt_; }
 
 private:
-  Table *table_        = nullptr;
-  Value *values_       = nullptr;
-  int    value_amount_ = 0;
+  Table           *table_       = nullptr;
+  const FieldMeta *field_meta_  = nullptr;  ///< 要更新的字段
+  Value            value_;                  ///< 更新后的值
+  FilterStmt      *filter_stmt_ = nullptr;  ///< where 条件
 };

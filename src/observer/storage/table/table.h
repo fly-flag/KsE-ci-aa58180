@@ -121,7 +121,10 @@ public:
 
   RC sync();
 
-private:
+  /**
+   * @brief 将一个值写入记录中指定字段的位置
+   * @details 更新语句会复用该逻辑，把更新后的值写入复制出来的记录中
+   */
   RC set_value_to_record(char *record_data, const Value &value, const FieldMeta *field);
 
 private:
