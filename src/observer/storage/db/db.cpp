@@ -176,6 +176,61 @@ RC Db::create_table(const char *table_name, span<const AttrInfoSqlNode> attribut
   return RC::SUCCESS;
 }
 
+RC Db::drop_table(const char *table_name)
+{
+  if (table_name == nullptr || common::is_blank(table_name)) {
+    LOG_WARN("invalid argument. table name is null or blank");
+    return RC::INVALID_ARGUMENT;
+  }
+
+  auto iter = opened_tables_.find(table_name);
+  if (iter == opened_tables_.end()) {
+    LOG_WARN("no such table. db=%s, table_name=%s", name_.c_str(), table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  Table *table = iter->second;
+  if (table->table_meta().storage_engine() == StorageEngine::LSM) {
+    LOG_WARN("drop lsm table is not supported yet. table=%s", table_name);
+    return RC::UNSUPPORTED;
+  }
+
+  const string table_name_str(table->name());
+
+  // 删除表对象之前先收集索引名，之后才能删除索引文件
+  vector<string>   index_names;
+  const TableMeta &table_meta = table->table_meta();
+  for (int i = 0; i < table_meta.index_num(); i++) {
+    index_names.emplace_back(table_meta.index(i)->name());
+  }
+
+  // 从数据库移除表并释放其内存资源（记录文件、索引、buffer pool 等）
+  opened_tables_.erase(iter);
+  delete table;
+
+  // 内存资源关闭后再删除磁盘文件
+  vector<string> table_files;
+  table_files.emplace_back(table_meta_file(path_.c_str(), table_name_str.c_str()));
+  table_files.emplace_back(table_data_file(path_.c_str(), table_name_str.c_str()));
+  for (const string &index_name : index_names) {
+    table_files.emplace_back(table_index_file(path_.c_str(), table_name_str.c_str(), index_name.c_str()));
+  }
+  table_files.emplace_back(table_lob_file(path_.c_str(), table_name_str.c_str()));
+
+  for (const string &table_file : table_files) {
+    error_code ec;
+    filesystem::remove(table_file, ec);
+    if (ec) {
+      LOG_WARN("failed to remove table file. file=%s, error=%s", table_file.c_str(), ec.message().c_str());
+    } else {
+      LOG_INFO("remove table file success. file=%s", table_file.c_str());
+    }
+  }
+
+  LOG_INFO("Drop table success. db=%s, table=%s", name_.c_str(), table_name_str.c_str());
+  return RC::SUCCESS;
+}
+
 Table *Db::find_table(const char *table_name) const
 {
   unordered_map<string, Table *>::const_iterator iter = opened_tables_.find(table_name);
