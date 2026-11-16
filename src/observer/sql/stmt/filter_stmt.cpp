@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/stmt/filter_stmt.h"
 #include "common/lang/string.h"
+#include "common/lang/utility.h"
 #include "common/log/log.h"
 #include "common/sys/rc.h"
 #include "storage/db/db.h"
@@ -21,29 +22,39 @@ See the Mulan PSL v2 for more details. */
 
 FilterStmt::~FilterStmt()
 {
-  for (FilterUnit *unit : filter_units_) {
-    delete unit;
+  for (vector<FilterUnit *> &filter_group : filter_groups_) {
+    for (FilterUnit *unit : filter_group) {
+      delete unit;
+    }
   }
-  filter_units_.clear();
+  filter_groups_.clear();
 }
 
 RC FilterStmt::create(Db *db, Table *default_table, unordered_map<string, Table *> *tables,
-    const ConditionSqlNode *conditions, int condition_num, FilterStmt *&stmt)
+    const WhereSqlNode &where, FilterStmt *&stmt)
 {
   RC rc = RC::SUCCESS;
   stmt  = nullptr;
 
   FilterStmt *tmp_stmt = new FilterStmt();
-  for (int i = 0; i < condition_num; i++) {
-    FilterUnit *filter_unit = nullptr;
+  for (const vector<ConditionSqlNode> &condition_group : where.groups) {
+    vector<FilterUnit *> filter_group;
+    for (const ConditionSqlNode &condition : condition_group) {
+      FilterUnit *filter_unit = nullptr;
 
-    rc = create_filter_unit(db, default_table, tables, conditions[i], filter_unit);
-    if (rc != RC::SUCCESS) {
-      delete tmp_stmt;
-      LOG_WARN("failed to create filter unit. condition index=%d", i);
-      return rc;
+      rc = create_filter_unit(db, default_table, tables, condition, filter_unit);
+      if (rc != RC::SUCCESS) {
+        delete filter_unit;
+        for (FilterUnit *unit : filter_group) {
+          delete unit;
+        }
+        delete tmp_stmt;
+        LOG_WARN("failed to create filter unit");
+        return rc;
+      }
+      filter_group.push_back(filter_unit);
     }
-    tmp_stmt->filter_units_.push_back(filter_unit);
+    tmp_stmt->filter_groups_.push_back(std::move(filter_group));
   }
 
   stmt = tmp_stmt;

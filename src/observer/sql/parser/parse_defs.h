@@ -76,6 +76,15 @@ struct ConditionSqlNode
 };
 
 /**
+ * @brief 描述 where 条件
+ * @details 外层是 OR 连接的多个条件组，组内是 AND 连接的条件
+ */
+struct WhereSqlNode
+{
+  vector<vector<ConditionSqlNode>> groups;  ///< 外层 OR，内层 AND
+};
+
+/**
  * @brief 描述一个select语句
  * @ingroup SQLParser
  * @details 一个正常的select语句描述起来比这个要复杂很多，这里做了简化。
@@ -90,7 +99,7 @@ struct SelectSqlNode
 {
   vector<unique_ptr<Expression>> expressions;  ///< 查询的表达式
   vector<string>                 relations;    ///< 查询的表
-  vector<ConditionSqlNode>       conditions;   ///< 查询条件，使用AND串联起来多个条件
+  WhereSqlNode                   conditions;   ///< 查询条件，外层 OR、内层 AND
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
 };
 
@@ -120,8 +129,8 @@ struct InsertSqlNode
  */
 struct DeleteSqlNode
 {
-  string                   relation_name;  ///< Relation to delete from
-  vector<ConditionSqlNode> conditions;
+  string       relation_name;  ///< Relation to delete from
+  WhereSqlNode conditions;
 };
 
 /**
@@ -130,10 +139,10 @@ struct DeleteSqlNode
  */
 struct UpdateSqlNode
 {
-  string                   relation_name;   ///< Relation to update
-  string                   attribute_name;  ///< 更新的字段，仅支持一个字段
-  Value                    value;           ///< 更新的值，仅支持一个字段
-  vector<ConditionSqlNode> conditions;
+  string       relation_name;   ///< Relation to update
+  string       attribute_name;  ///< 更新的字段，仅支持一个字段
+  Value        value;           ///< 更新的值，仅支持一个字段
+  WhereSqlNode conditions;
 };
 
 /**

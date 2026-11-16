@@ -98,6 +98,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         FROM
         WHERE
         AND
+        OR
         SET
         ON
         LOAD
@@ -132,6 +133,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   vector<unique_ptr<Expression>> *           expression_list;
   vector<Value> *                            value_list;
   vector<ConditionSqlNode> *                 condition_list;
+  WhereSqlNode *                             where_clause;
   vector<RelAttrSqlNode> *                   rel_attr_list;
   vector<string> *                           relation_list;
   vector<string> *                           key_list;
@@ -148,6 +150,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %destructor { delete $$; } <expression_list>
 %destructor { delete $$; } <value_list>
 %destructor { delete $$; } <condition_list>
+%destructor { delete $$; } <where_clause>
 // %destructor { delete $$; } <rel_attr_list>
 %destructor { delete $$; } <relation_list>
 %destructor { delete $$; } <key_list>
@@ -169,7 +172,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
 %type <value_list>          value_list
-%type <condition_list>      where
+%type <where_clause>        where
+%type <where_clause>        or_condition
 %type <condition_list>      condition_list
 %type <cstring>             storage_format
 %type <key_list>            primary_key
@@ -466,7 +470,7 @@ delete_stmt:    /*  delete 语句的语法解析树*/
       $$ = new ParsedSqlNode(SCF_DELETE);
       $$->deletion.relation_name = $3;
       if ($4 != nullptr) {
-        $$->deletion.conditions.swap(*$4);
+        $$->deletion.conditions = std::move(*$4);
         delete $4;
       }
     }
@@ -479,7 +483,7 @@ update_stmt:      /*  update 语句的语法解析树*/
       $$->update.attribute_name = $4;
       $$->update.value = *$6;
       if ($7 != nullptr) {
-        $$->update.conditions.swap(*$7);
+        $$->update.conditions = std::move(*$7);
         delete $7;
       }
     }
@@ -499,7 +503,7 @@ select_stmt:        /*  select 语句的语法解析树*/
       }
 
       if ($5 != nullptr) {
-        $$->selection.conditions.swap(*$5);
+        $$->selection.conditions = std::move(*$5);
         delete $5;
       }
 
@@ -617,16 +621,28 @@ where:
     {
       $$ = nullptr;
     }
-    | WHERE condition_list {
-      $$ = $2;  
+    | WHERE or_condition {
+      $$ = $2;
+    }
+    ;
+or_condition:
+    condition_list {
+      $$ = new WhereSqlNode;
+      if ($1 != nullptr) {
+        $$->groups.emplace_back(std::move(*$1));
+        delete $1;
+      }
+    }
+    | or_condition OR condition_list {
+      $$ = $1;
+      if ($3 != nullptr) {
+        $$->groups.emplace_back(std::move(*$3));
+        delete $3;
+      }
     }
     ;
 condition_list:
-    /* empty */
-    {
-      $$ = nullptr;
-    }
-    | condition {
+    condition {
       $$ = new vector<ConditionSqlNode>;
       $$->emplace_back(*$1);
       delete $1;
