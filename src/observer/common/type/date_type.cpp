@@ -75,8 +75,8 @@ RC DateType::to_julian_day(const char *date_str, int &julian_day)
     return RC::SCHEMA_FIELD_TYPE_MISMATCH;
   }
 
-  // DATE 的取值范围与 MySQL 保持一致：1000-01-01 ~ 9999-12-31
-  if (year < 1000 || year > 9999 || month < 1 || month > 12) {
+  // 年份范围与 MiniOB 参考实现保持一致：1 ~ 9999；月份和日期需要严格校验
+  if (year < 1 || year > 9999 || month < 1 || month > 12) {
     return RC::SCHEMA_FIELD_TYPE_MISMATCH;
   }
   if (day < 1 || day > max_day_in_month(year, month)) {
