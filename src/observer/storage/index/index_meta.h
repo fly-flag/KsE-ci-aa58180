@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/sys/rc.h"
 #include "common/lang/string.h"
+#include "common/lang/vector.h"
 
 class TableMeta;
 class FieldMeta;
@@ -35,11 +36,14 @@ class IndexMeta
 public:
   IndexMeta() = default;
 
+  RC init(const char *name, const vector<string> &field_names);
   RC init(const char *name, const FieldMeta &field);
 
 public:
-  const char *name() const;
-  const char *field() const;
+  const char               *name() const;
+  const char               *field() const;
+  const vector<string>     &fields() const { return fields_; }
+  int                       field_count() const { return static_cast<int>(fields_.size()); }
 
   void desc(ostream &os) const;
 
@@ -48,6 +52,6 @@ public:
   static RC from_json(const TableMeta &table, const Json::Value &json_value, IndexMeta &index);
 
 protected:
-  string name_;   // index's name
-  string field_;  // field's name
+  string         name_;    // index's name
+  vector<string> fields_;  // fields' names
 };

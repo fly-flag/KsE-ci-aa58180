@@ -799,7 +799,8 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
                             AttrType attr_type, 
                             int attr_length, 
                             int internal_max_size /* = -1*/,
-                            int leaf_max_size /* = -1 */)
+                            int leaf_max_size /* = -1 */,
+                            bool raw_key /* = false */)
 {
   RC rc = bpm.create_file(file_name);
   if (OB_FAIL(rc)) {
@@ -817,7 +818,7 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
   }
   LOG_INFO("Successfully open index file %s.", file_name);
 
-  rc = this->create(log_handler, *bp, attr_type, attr_length, internal_max_size, leaf_max_size);
+  rc = this->create(log_handler, *bp, attr_type, attr_length, internal_max_size, leaf_max_size, raw_key);
   if (OB_FAIL(rc)) {
     bpm.close_file(file_name);
     return rc;
@@ -832,7 +833,8 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
             AttrType attr_type,
             int attr_length,
             int internal_max_size /* = -1 */,
-            int leaf_max_size /* = -1 */)
+            int leaf_max_size /* = -1 */,
+            bool raw_key /* = false */)
 {
   if (internal_max_size < 0) {
     internal_max_size = calc_internal_page_capacity(attr_length);
@@ -867,6 +869,7 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
   file_header->attr_length       = attr_length;
   file_header->key_length        = attr_length + sizeof(RID);
   file_header->attr_type         = attr_type;
+  file_header->key_format        = raw_key ? 1 : 0;
   file_header->internal_max_size = internal_max_size;
   file_header->leaf_max_size     = leaf_max_size;
   file_header->root_page         = BP_INVALID_PAGE_NUM;
@@ -886,8 +889,8 @@ RC BplusTreeHandler::create(LogHandler &log_handler,
     return RC::NOMEM;
   }
 
-  key_comparator_.init(file_header->attr_type, file_header->attr_length);
-  key_printer_.init(file_header->attr_type, file_header->attr_length);
+  key_comparator_.init(file_header->attr_type, file_header->attr_length, file_header->key_format != 0);
+  key_printer_.init(file_header->attr_type, file_header->attr_length, file_header->key_format != 0);
 
   /*
   虽然我们针对B+树记录了WAL，但是我们记录的都是逻辑日志，并没有记录某个页面如何修改的物理日志。
@@ -958,8 +961,8 @@ RC BplusTreeHandler::open(LogHandler &log_handler, DiskBufferPool &buffer_pool)
   // close old page_handle
   buffer_pool.unpin_page(frame);
 
-  key_comparator_.init(file_header_.attr_type, file_header_.attr_length);
-  key_printer_.init(file_header_.attr_type, file_header_.attr_length);
+  key_comparator_.init(file_header_.attr_type, file_header_.attr_length, file_header_.key_format != 0);
+  key_printer_.init(file_header_.attr_type, file_header_.attr_length, file_header_.key_format != 0);
   LOG_INFO("Successfully open index");
   return RC::SUCCESS;
 }
@@ -1437,8 +1440,8 @@ RC BplusTreeHandler::recover_init_header_page(BplusTreeMiniTransaction &mtr, Fra
   header_dirty_ = false;
   frame->mark_dirty();
 
-  key_comparator_.init(file_header_.attr_type, file_header_.attr_length);
-  key_printer_.init(file_header_.attr_type, file_header_.attr_length);
+  key_comparator_.init(file_header_.attr_type, file_header_.attr_length, file_header_.key_format != 0);
+  key_printer_.init(file_header_.attr_type, file_header_.attr_length, file_header_.key_format != 0);
 
   return RC::SUCCESS;
 }

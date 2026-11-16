@@ -56,16 +56,22 @@ enum class BplusTreeOperationType
 class AttrComparator
 {
 public:
-  void init(AttrType type, int length)
+  void init(AttrType type, int length, bool raw_bytes = false)
   {
     attr_type_   = type;
     attr_length_ = length;
+    raw_bytes_   = raw_bytes;
   }
 
   int attr_length() const { return attr_length_; }
 
   int operator()(const char *v1, const char *v2) const
   {
+    if (raw_bytes_) {
+      const int result = memcmp(v1, v2, attr_length_);
+      return result < 0 ? -1 : (result > 0 ? 1 : 0);
+    }
+
     // TODO: optimized the comparison
     Value left;
     left.set_type(attr_type_);
@@ -79,6 +85,7 @@ public:
 private:
   AttrType attr_type_;
   int      attr_length_;
+  bool     raw_bytes_ = false;
 };
 
 /**
@@ -89,7 +96,7 @@ private:
 class KeyComparator
 {
 public:
-  void init(AttrType type, int length) { attr_comparator_.init(type, length); }
+  void init(AttrType type, int length, bool raw_bytes = false) { attr_comparator_.init(type, length, raw_bytes); }
 
   const AttrComparator &attr_comparator() const { return attr_comparator_; }
 
@@ -116,16 +123,28 @@ private:
 class AttrPrinter
 {
 public:
-  void init(AttrType type, int length)
+  void init(AttrType type, int length, bool raw_bytes = false)
   {
     attr_type_   = type;
     attr_length_ = length;
+    raw_bytes_   = raw_bytes;
   }
 
   int attr_length() const { return attr_length_; }
 
   string operator()(const char *v) const
   {
+    if (raw_bytes_) {
+      stringstream ss;
+      for (int i = 0; i < attr_length_; i++) {
+        if (i != 0) {
+          ss << "-";
+        }
+        ss << static_cast<int>(static_cast<unsigned char>(v[i]));
+      }
+      return ss.str();
+    }
+
     Value value(attr_type_, const_cast<char *>(v), attr_length_);
     return value.to_string();
   }
@@ -133,6 +152,7 @@ public:
 private:
   AttrType attr_type_;
   int      attr_length_;
+  bool     raw_bytes_ = false;
 };
 
 /**
@@ -142,7 +162,7 @@ private:
 class KeyPrinter
 {
 public:
-  void init(AttrType type, int length) { attr_printer_.init(type, length); }
+  void init(AttrType type, int length, bool raw_bytes = false) { attr_printer_.init(type, length, raw_bytes); }
 
   const AttrPrinter &attr_printer() const { return attr_printer_; }
 
@@ -179,6 +199,7 @@ struct IndexFileHeader
   int32_t  attr_length;        ///< 键值的长度
   int32_t  key_length;         ///< attr length + sizeof(RID)
   AttrType attr_type;          ///< 键值的类型
+  int32_t  key_format;         ///< 0: 单字段类型比较；1: 多字段原始字节比较
 
   const string to_string() const
   {
@@ -187,6 +208,7 @@ struct IndexFileHeader
     ss << "attr_length:" << attr_length << ","
        << "key_length:" << key_length << ","
        << "attr_type:" << attr_type_to_string(attr_type) << ","
+       << "key_format:" << key_format << ","
        << "root_page:" << root_page << ","
        << "internal_max_size:" << internal_max_size << ","
        << "leaf_max_size:" << leaf_max_size << ";";
@@ -460,9 +482,9 @@ public:
    * @param leaf_max_size 叶子节点最大大小
    */
   RC create(LogHandler &log_handler, BufferPoolManager &bpm, const char *file_name, AttrType attr_type, int attr_length,
-      int internal_max_size = -1, int leaf_max_size = -1);
+      int internal_max_size = -1, int leaf_max_size = -1, bool raw_key = false);
   RC create(LogHandler &log_handler, DiskBufferPool &buffer_pool, AttrType attr_type, int attr_length,
-      int internal_max_size = -1, int leaf_max_size = -1);
+      int internal_max_size = -1, int leaf_max_size = -1, bool raw_key = false);
 
   /**
    * @brief 打开一个B+树

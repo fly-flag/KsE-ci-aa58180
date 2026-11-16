@@ -29,6 +29,11 @@ public:
 
   RC create(Table *table, const char *file_name, const IndexMeta &index_meta, const FieldMeta &field_meta) override;
   RC open(Table *table, const char *file_name, const IndexMeta &index_meta, const FieldMeta &field_meta) override;
+
+  RC create(
+      Table *table, const char *file_name, const IndexMeta &index_meta, const vector<FieldMeta> &field_metas);
+  RC open(Table *table, const char *file_name, const IndexMeta &index_meta, const vector<FieldMeta> &field_metas);
+
   RC close();
 
   RC insert_entry(const char *record, const RID *rid) override;
@@ -43,9 +48,14 @@ public:
   RC sync() override;
 
 private:
-  bool             inited_ = false;
-  Table           *table_  = nullptr;
-  BplusTreeHandler index_handler_;
+  RC build_key(const char *record, string &key) const;
+
+private:
+  bool              inited_     = false;
+  Table            *table_      = nullptr;
+  vector<FieldMeta> fields_;
+  int               key_length_ = 0;
+  BplusTreeHandler  index_handler_;
 };
 
 /**
