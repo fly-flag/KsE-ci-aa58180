@@ -21,6 +21,8 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/utility.h"
 
 class Expression;
+struct SelectSqlNode;
+struct SubQuerySqlNode;
 
 /**
  * @defgroup SQLParser SQL Parser
@@ -51,6 +53,10 @@ enum CompOp
   LESS_THAN,    ///< "<"
   GREAT_EQUAL,  ///< ">="
   GREAT_THAN,   ///< ">"
+  IN_OP,
+  NOT_IN,
+  IS_NULL,
+  IS_NOT_NULL,
   NO_OP
 };
 
@@ -73,6 +79,9 @@ struct ConditionSqlNode
                                  ///< 1时，操作符右边是属性名，0时，是属性值
   RelAttrSqlNode right_attr;     ///< right-hand side attribute if right_is_attr = TRUE 右边的属性
   Value          right_value;    ///< right-hand side value if right_is_attr = FALSE
+  shared_ptr<SelectSqlNode> left_subquery;
+  shared_ptr<SelectSqlNode> right_subquery;
+  vector<Value>             right_values;
 };
 
 /**
@@ -101,6 +110,11 @@ struct SelectSqlNode
   vector<string>                 relations;    ///< 查询的表
   WhereSqlNode                   conditions;   ///< 查询条件，外层 OR、内层 AND
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
+};
+
+struct SubQuerySqlNode
+{
+  shared_ptr<SelectSqlNode> select;
 };
 
 /**

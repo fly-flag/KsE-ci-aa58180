@@ -172,11 +172,24 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
                                       ? static_cast<Expression *>(new FieldExpr(filter_obj_left.field))
                                       : static_cast<Expression *>(new ValueExpr(filter_obj_left.value)));
 
+      if (filter_unit->is_in()) {
+        cmp_exprs.emplace_back(new InExpr(std::move(left), filter_unit->in_values(), filter_unit->is_not_in()));
+        continue;
+      }
+
       unique_ptr<Expression> right(filter_obj_right.is_attr
                                        ? static_cast<Expression *>(new FieldExpr(filter_obj_right.field))
                                        : static_cast<Expression *>(new ValueExpr(filter_obj_right.value)));
 
-      if (left->value_type() != right->value_type()) {
+      const bool is_null_op = filter_unit->comp() == IS_NULL || filter_unit->comp() == IS_NOT_NULL;
+      if (!is_null_op &&
+          ((!filter_obj_left.is_attr && filter_obj_left.value.is_null()) ||
+              (!filter_obj_right.is_attr && filter_obj_right.value.is_null()))) {
+        cmp_exprs.emplace_back(new ValueExpr(Value(false)));
+        continue;
+      }
+
+      if (!is_null_op && left->value_type() != right->value_type()) {
         auto left_to_right_cost = implicit_cast_cost(left->value_type(), right->value_type());
         auto right_to_left_cost = implicit_cast_cost(right->value_type(), left->value_type());
         if (left_to_right_cost <= right_to_left_cost && left_to_right_cost != INT32_MAX) {

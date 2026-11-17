@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/memory.h"
 #include "common/lang/unordered_set.h"
+#include "common/lang/vector.h"
 #include "common/value.h"
 #include "storage/field/field.h"
 #include "sql/expr/aggregator.h"
@@ -44,6 +45,7 @@ enum class ExprType
   VALUE,        ///< 常量值
   CAST,         ///< 需要做类型转换的表达式
   COMPARISON,   ///< 需要做比较的表达式
+  IN,           ///< IN/NOT IN 表达式
   CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,   ///< 算术运算
   AGGREGATION,  ///< 聚合运算
@@ -335,6 +337,30 @@ private:
   CompOp                 comp_;
   unique_ptr<Expression> left_;
   unique_ptr<Expression> right_;
+};
+
+class InExpr : public Expression
+{
+public:
+  InExpr(unique_ptr<Expression> left, vector<Value> values, bool is_not_in)
+      : left_(std::move(left)), values_(std::move(values)), is_not_in_(is_not_in)
+  {}
+
+  virtual ~InExpr() = default;
+
+  ExprType type() const override { return ExprType::IN; }
+  RC       get_value(const Tuple &tuple, Value &value) const override;
+  AttrType value_type() const override { return AttrType::BOOLEANS; }
+
+  unique_ptr<Expression> copy() const override
+  {
+    return make_unique<InExpr>(left_->copy(), values_, is_not_in_);
+  }
+
+private:
+  unique_ptr<Expression> left_;
+  vector<Value>          values_;
+  bool                   is_not_in_ = false;
 };
 
 /**

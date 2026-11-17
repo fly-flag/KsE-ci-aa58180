@@ -99,6 +99,10 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         WHERE
         AND
         OR
+        IN
+        NOT
+        IS
+        NULL_T
         SET
         ON
         LOAD
@@ -132,6 +136,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   Expression *                               expression;
   vector<unique_ptr<Expression>> *           expression_list;
   vector<Value> *                            value_list;
+  SubQuerySqlNode *                          subquery;
   vector<ConditionSqlNode> *                 condition_list;
   WhereSqlNode *                             where_clause;
   vector<RelAttrSqlNode> *                   rel_attr_list;
@@ -149,6 +154,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %destructor { delete $$; } <expression>
 %destructor { delete $$; } <expression_list>
 %destructor { delete $$; } <value_list>
+%destructor { delete $$; } <subquery>
 %destructor { delete $$; } <condition_list>
 %destructor { delete $$; } <where_clause>
 // %destructor { delete $$; } <rel_attr_list>
@@ -168,6 +174,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <number>              number
 %type <cstring>             relation
 %type <comp>                comp_op
+%type <comp>                in_op
+%type <subquery>            subquery
 %type <rel_attr>            rel_attr
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
@@ -455,6 +463,10 @@ value:
       $$ = new Value(tmp);
       free(tmp);
     }
+    |NULL_T {
+      $$ = new Value();
+      $$->set_null();
+    }
     ;
 storage_format:
     /* empty */
@@ -656,6 +668,20 @@ condition_list:
       delete $1;
     }
     ;
+subquery:
+    LBRACE select_stmt RBRACE
+    {
+      $$ = new SubQuerySqlNode;
+      $$->select = std::make_shared<SelectSqlNode>(std::move($2->selection));
+      delete $2;
+    }
+    ;
+
+in_op:
+    IN { $$ = IN_OP; }
+    | NOT IN { $$ = NOT_IN; }
+    ;
+
 condition:
     rel_attr comp_op value
     {
@@ -704,6 +730,76 @@ condition:
 
       delete $1;
       delete $3;
+    }
+    | rel_attr comp_op subquery
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 2;
+      $$->right_subquery = $3->select;
+      $$->comp = $2;
+
+      delete $1;
+      delete $3;
+    }
+    | subquery comp_op rel_attr
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 2;
+      $$->left_subquery = $1->select;
+      $$->right_is_attr = 1;
+      $$->right_attr = *$3;
+      $$->comp = $2;
+
+      delete $1;
+      delete $3;
+    }
+    | rel_attr in_op subquery
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 2;
+      $$->right_subquery = $3->select;
+      $$->comp = $2;
+
+      delete $1;
+      delete $3;
+    }
+    | rel_attr IN LBRACE value_list RBRACE
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 3;
+      $$->right_values.swap(*$4);
+      $$->comp = IN_OP;
+
+      delete $1;
+      delete $4;
+    }
+    | rel_attr IS NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value.set_null();
+      $$->comp = IS_NULL;
+
+      delete $1;
+    }
+    | rel_attr IS NOT NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value.set_null();
+      $$->comp = IS_NOT_NULL;
+
+      delete $1;
     }
     ;
 

@@ -141,6 +141,18 @@ ComparisonExpr::~ComparisonExpr() {}
 
 RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &result) const
 {
+  if (comp_ == IS_NULL) {
+    result = left.is_null();
+    return RC::SUCCESS;
+  }
+  if (comp_ == IS_NOT_NULL) {
+    result = !left.is_null();
+    return RC::SUCCESS;
+  }
+  if (left.is_null() || right.is_null()) {
+    result = false;
+    return RC::SUCCESS;
+  }
   RC  rc         = RC::SUCCESS;
   int cmp_result = left.compare(right);
   result         = false;
@@ -288,6 +300,37 @@ RC ComparisonExpr::compare_column(const Column &left, const Column &right, vecto
     compare_result<T, false, false>((T *)left.data(), (T *)right.data(), left.count(), result, comp_);
   }
   return rc;
+}
+
+RC InExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  Value left_value;
+  RC    rc = left_->get_value(tuple, left_value);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  if (left_value.is_null()) {
+    value.set_boolean(false);
+    return RC::SUCCESS;
+  }
+
+  bool matched  = false;
+  bool has_null = false;
+  for (const Value &in_value : values_) {
+    if (in_value.is_null()) {
+      has_null = true;
+      continue;
+    }
+    if (left_value.compare(in_value) == 0) {
+      matched = true;
+      break;
+    }
+  }
+
+  bool result = is_not_in_ ? (!matched && !has_null) : matched;
+  value.set_boolean(result);
+  return RC::SUCCESS;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

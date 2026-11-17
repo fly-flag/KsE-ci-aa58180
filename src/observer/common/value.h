@@ -84,10 +84,20 @@ public:
 
   static RC cast_to(const Value &value, AttrType to_type, Value &result)
   {
+    if (value.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(value.attr_type())->cast_to(value, to_type, result);
   }
 
   void set_type(AttrType type) { this->attr_type_ = type; }
+  void set_null()
+  {
+    reset();
+    null_ = true;
+  }
+  bool is_null() const { return null_; }
   void set_data(char *data, int length);
   void set_data(const char *data, int length) { this->set_data(const_cast<char *>(data), length); }
   void set_value(const Value &value);
@@ -134,4 +144,5 @@ private:
 
   /// 是否申请并占有内存, 目前对于 CHARS 类型 own_data_ 为true, 其余类型 own_data_ 为false
   bool own_data_ = false;
+  bool null_     = false;
 };

@@ -20,6 +20,9 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/log/log.h"
 
+#include <cmath>
+#include <cstdint>
+
 Value::Value(int val) { set_int(val); }
 
 Value::Value(float val) { set_float(val); }
@@ -36,6 +39,7 @@ Value::Value(const Value &other)
   this->attr_type_ = other.attr_type_;
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
+  this->null_      = other.null_;
   switch (this->attr_type_) {
     case AttrType::CHARS: {
       set_string_from_other(other);
@@ -53,8 +57,10 @@ Value::Value(Value &&other)
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
   this->value_     = other.value_;
+  this->null_      = other.null_;
   other.own_data_  = false;
   other.length_    = 0;
+  other.null_      = false;
 }
 
 Value &Value::operator=(const Value &other)
@@ -66,6 +72,7 @@ Value &Value::operator=(const Value &other)
   this->attr_type_ = other.attr_type_;
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
+  this->null_      = other.null_;
   switch (this->attr_type_) {
     case AttrType::CHARS: {
       set_string_from_other(other);
@@ -88,8 +95,10 @@ Value &Value::operator=(Value &&other)
   this->length_    = other.length_;
   this->own_data_  = other.own_data_;
   this->value_     = other.value_;
+  this->null_      = other.null_;
   other.own_data_  = false;
   other.length_    = 0;
+  other.null_      = false;
   return *this;
 }
 
@@ -108,10 +117,12 @@ void Value::reset()
   attr_type_ = AttrType::UNDEFINED;
   length_    = 0;
   own_data_  = false;
+  null_      = false;
 }
 
 void Value::set_data(char *data, int length)
 {
+  null_ = false;
   switch (attr_type_) {
     case AttrType::CHARS: {
       set_string(data, length);
@@ -119,10 +130,12 @@ void Value::set_data(char *data, int length)
     case AttrType::INTS: {
       value_.int_value_ = *(int *)data;
       length_           = length;
+      null_             = (value_.int_value_ == INT32_MIN);
     } break;
     case AttrType::FLOATS: {
       value_.float_value_ = *(float *)data;
       length_             = length;
+      null_               = std::isnan(value_.float_value_);
     } break;
     case AttrType::BOOLEANS: {
       value_.bool_value_ = *(int *)data != 0;
@@ -131,6 +144,7 @@ void Value::set_data(char *data, int length)
     case AttrType::DATES: {
       value_.int_value_ = *(int *)data;
       length_           = length;
+      null_             = (value_.int_value_ == INT32_MIN);
     } break;
     default: {
       LOG_WARN("unknown data type: %d", attr_type_);
@@ -197,6 +211,10 @@ void Value::set_empty_string(int len)
 
 void Value::set_value(const Value &value)
 {
+  if (value.is_null()) {
+    set_null();
+    return;
+  }
   switch (value.attr_type_) {
     case AttrType::INTS: {
       set_int(value.get_int());
@@ -244,6 +262,9 @@ char *Value::data() const
 
 string Value::to_string() const
 {
+  if (null_) {
+    return "NULL";
+  }
   string res;
   RC     rc = DataType::type_instance(this->attr_type_)->to_string(*this, res);
   if (OB_FAIL(rc)) {
@@ -253,10 +274,22 @@ string Value::to_string() const
   return res;
 }
 
-int Value::compare(const Value &other) const { return DataType::type_instance(this->attr_type_)->compare(*this, other); }
+int Value::compare(const Value &other) const
+{
+  if (is_null() || other.is_null()) {
+    if (is_null() && other.is_null()) {
+      return 0;
+    }
+    return is_null() ? -1 : 1;
+  }
+  return DataType::type_instance(this->attr_type_)->compare(*this, other);
+}
 
 int Value::get_int() const
 {
+  if (is_null()) {
+    return 0;
+  }
   switch (attr_type_) {
     case AttrType::CHARS: {
       try {
@@ -288,6 +321,9 @@ int Value::get_int() const
 
 float Value::get_float() const
 {
+  if (is_null()) {
+    return 0.0f;
+  }
   switch (attr_type_) {
     case AttrType::CHARS: {
       try {
@@ -327,6 +363,9 @@ string_t Value::get_string_t() const
 
 bool Value::get_boolean() const
 {
+  if (is_null()) {
+    return false;
+  }
   switch (attr_type_) {
     case AttrType::CHARS: {
       try {

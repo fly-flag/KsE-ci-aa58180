@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <utility>
+
 #include "common/lang/unordered_map.h"
 #include "common/lang/vector.h"
 #include "sql/expr/expression.h"
@@ -26,7 +28,7 @@ class FieldMeta;
 
 struct FilterObj
 {
-  bool  is_attr;
+  bool  is_attr = false;
   Field field;
   Value value;
 
@@ -59,10 +61,24 @@ public:
   const FilterObj &left() const { return left_; }
   const FilterObj &right() const { return right_; }
 
+  void set_in_values(vector<Value> &&values, bool is_not_in)
+  {
+    in_values_  = std::move(values);
+    is_in_      = true;
+    is_not_in_  = is_not_in;
+  }
+  bool is_in() const { return is_in_; }
+  bool is_not_in() const { return is_not_in_; }
+  const vector<Value> &in_values() const { return in_values_; }
+  vector<Value>       &in_values() { return in_values_; }
+
 private:
-  CompOp    comp_ = NO_OP;
-  FilterObj left_;
-  FilterObj right_;
+  CompOp         comp_ = NO_OP;
+  FilterObj      left_;
+  FilterObj      right_;
+  bool           is_in_     = false;
+  bool           is_not_in_ = false;
+  vector<Value>  in_values_;
 };
 
 /**

@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 
 #include <limits.h>
 #include <string.h>
+#include <cstdint>
+#include <limits>
 
 #include "common/defs.h"
 #include "common/lang/string.h"
@@ -228,6 +230,23 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
   for (int i = 0; i < value_num && OB_SUCC(rc); i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &    value = values[i];
+    if (value.is_null()) {
+      switch (field->type()) {
+        case AttrType::INTS:
+        case AttrType::DATES: {
+          const int null_value = INT32_MIN;
+          memcpy(record_data + field->offset(), &null_value, sizeof(null_value));
+        } break;
+        case AttrType::FLOATS: {
+          const float null_value = std::numeric_limits<float>::quiet_NaN();
+          memcpy(record_data + field->offset(), &null_value, sizeof(null_value));
+        } break;
+        default: {
+          memset(record_data + field->offset(), 0, field->len());
+        } break;
+      }
+      continue;
+    }
     if (field->type() != value.attr_type()) {
       Value real_value;
       rc = Value::cast_to(value, field->type(), real_value);
