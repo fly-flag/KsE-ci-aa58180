@@ -162,6 +162,7 @@ jobs:
         run: |
           echo "begin test..."
           python3 test/case/miniob_test.py --test-cases=primary-simple-sub-query
+          find . -name observer.stderr -print -exec cat {} \; || true
   sysbench-test:
     needs: [build-release]
     strategy:
