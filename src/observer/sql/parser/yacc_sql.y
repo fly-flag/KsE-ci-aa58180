@@ -767,14 +767,14 @@ condition:
       delete $1;
       delete $3;
     }
-    | rel_attr IN LBRACE value_list RBRACE
+    | rel_attr in_op LBRACE value_list RBRACE
     {
       $$ = new ConditionSqlNode;
       $$->left_is_attr = 1;
       $$->left_attr = *$1;
       $$->right_is_attr = 3;
       $$->right_values.swap(*$4);
-      $$->comp = IN_OP;
+      $$->comp = $2;
 
       delete $1;
       delete $4;
