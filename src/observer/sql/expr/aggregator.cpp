@@ -17,20 +17,107 @@ See the Mulan PSL v2 for more details. */
 
 RC SumAggregator::accumulate(const Value &value)
 {
+  if (value.is_null()) {
+    return RC::SUCCESS;
+  }
   if (value_.attr_type() == AttrType::UNDEFINED) {
     value_ = value;
     return RC::SUCCESS;
   }
-  
-  ASSERT(value.attr_type() == value_.attr_type(), "type mismatch. value type: %s, value_.type: %s", 
-        attr_type_to_string(value.attr_type()), attr_type_to_string(value_.attr_type()));
-  
+
+  ASSERT(value.attr_type() == value_.attr_type(), "type mismatch. value type: %s, value_.type: %s",
+      attr_type_to_string(value.attr_type()), attr_type_to_string(value_.attr_type()));
+
   Value::add(value, value_, value_);
   return RC::SUCCESS;
 }
 
-RC SumAggregator::evaluate(Value& result)
+RC SumAggregator::evaluate(Value &result)
 {
-  result = value_;
+  if (value_.attr_type() == AttrType::UNDEFINED) {
+    result.set_null();
+  } else {
+    result = value_;
+  }
+  return RC::SUCCESS;
+}
+
+RC CountAggregator::accumulate(const Value &value)
+{
+  if (!value.is_null()) {
+    count_++;
+  }
+  return RC::SUCCESS;
+}
+
+RC CountAggregator::evaluate(Value &result)
+{
+  result.set_int(count_);
+  return RC::SUCCESS;
+}
+
+RC AvgAggregator::accumulate(const Value &value)
+{
+  if (value.is_null()) {
+    return RC::SUCCESS;
+  }
+  if (value_.attr_type() == AttrType::UNDEFINED) {
+    value_ = value;
+  } else {
+    Value::add(value, value_, value_);
+  }
+  count_++;
+  return RC::SUCCESS;
+}
+
+RC AvgAggregator::evaluate(Value &result)
+{
+  if (count_ == 0) {
+    result.set_null();
+  } else {
+    result.set_float(value_.get_float() / count_);
+  }
+  return RC::SUCCESS;
+}
+
+RC MaxAggregator::accumulate(const Value &value)
+{
+  if (value.is_null()) {
+    return RC::SUCCESS;
+  }
+  if (value_.attr_type() == AttrType::UNDEFINED || value.compare(value_) > 0) {
+    value_ = value;
+  }
+  return RC::SUCCESS;
+}
+
+RC MaxAggregator::evaluate(Value &result)
+{
+  if (value_.attr_type() == AttrType::UNDEFINED) {
+    result.set_null();
+  } else {
+    result = value_;
+  }
+  return RC::SUCCESS;
+}
+
+RC MinAggregator::accumulate(const Value &value)
+{
+  if (value.is_null()) {
+    return RC::SUCCESS;
+  }
+  if (value_.attr_type() == AttrType::UNDEFINED || value.compare(value_) < 0) {
+    value_ = value;
+  }
+  return RC::SUCCESS;
+}
+
+RC MinAggregator::evaluate(Value &result)
+{
+  if (value_.attr_type() == AttrType::UNDEFINED) {
+    result.set_null();
+  } else {
+    result = value_;
+  }
   return RC::SUCCESS;
 }
