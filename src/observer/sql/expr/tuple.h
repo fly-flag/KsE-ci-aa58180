@@ -196,6 +196,9 @@ public:
     FieldExpr       *field_expr = speces_[index];
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.reset();
+    if (field_meta->type() == AttrType::TEXTS) {
+      return table_->get_text_value(this->record_->data(), field_meta, cell);
+    }
     cell.set_type(field_meta->type());
     cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     return RC::SUCCESS;

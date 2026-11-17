@@ -20,7 +20,7 @@ See the Mulan PSL v2 for more details. */
 class CharType : public DataType
 {
 public:
-  CharType() : DataType(AttrType::CHARS) {}
+  explicit CharType(AttrType type = AttrType::CHARS) : DataType(type) {}
 
   virtual ~CharType() = default;
 

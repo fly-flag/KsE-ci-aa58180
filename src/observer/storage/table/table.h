@@ -127,6 +127,8 @@ public:
    */
   RC set_value_to_record(char *record_data, const Value &value, const FieldMeta *field);
 
+  RC get_text_value(const char *record_data, const FieldMeta *field, Value &value) const;
+
 private:
   // RC init_record_handler(const char *base_dir);
 

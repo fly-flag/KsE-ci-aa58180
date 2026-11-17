@@ -101,10 +101,18 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
   db_       = db;
 
   string             data_file = table_data_file(base_dir, name);
+  string             lob_file  = table_lob_file(base_dir, name);
   BufferPoolManager &bpm       = db->buffer_pool_manager();
   rc                           = bpm.create_file(data_file.c_str());
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Failed to create disk buffer pool of data file. file name=%s", data_file.c_str());
+    return rc;
+  }
+
+  lob_handler_ = new LobFileHandler();
+  rc           = lob_handler_->create_file(lob_file.c_str());
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to create lob file. file name=%s", lob_file.c_str());
     return rc;
   }
 
@@ -154,6 +162,17 @@ RC Table::open(Db *db, const char *meta_file, const char *base_dir)
   //   return rc;
   // }
   RC rc = RC::SUCCESS;
+
+  string lob_file = table_lob_file(base_dir, table_meta_.name());
+  lob_handler_    = new LobFileHandler();
+  rc              = lob_handler_->open_file(lob_file.c_str());
+  if (rc == RC::FILE_NOT_EXIST) {
+    rc = lob_handler_->create_file(lob_file.c_str());
+  }
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to open lob file. file name=%s", lob_file.c_str());
+    return rc;
+  }
 
   if (table_meta_.storage_engine() == StorageEngine::HEAP) {
     engine_ = make_unique<HeapTableEngine>(&table_meta_, db_, this);
@@ -241,11 +260,22 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
           const float null_value = std::numeric_limits<float>::quiet_NaN();
           memcpy(record_data + field->offset(), &null_value, sizeof(null_value));
         } break;
+        case AttrType::TEXTS: {
+          LobReference null_ref;
+          null_ref.length = -1;
+          memcpy(record_data + field->offset(), &null_ref, sizeof(null_ref));
+        } break;
         default: {
           memset(record_data + field->offset(), 0, field->len());
         } break;
       }
       continue;
+    }
+    if (field->type() == AttrType::TEXTS && value.length() > TEXT_MAX_LENGTH) {
+      LOG_WARN("text value exceeds max length. table name:%s, field name:%s, length:%d",
+          table_meta_.name(), field->name(), value.length());
+      rc = RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      break;
     }
     if (field->type() != value.attr_type()) {
       Value real_value;
@@ -272,6 +302,27 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
 RC Table::set_value_to_record(char *record_data, const Value &value, const FieldMeta *field)
 {
+  if (field->type() == AttrType::TEXTS) {
+    if (value.is_null()) {
+      LobReference null_ref;
+      null_ref.length = -1;
+      memcpy(record_data + field->offset(), &null_ref, sizeof(null_ref));
+      return RC::SUCCESS;
+    }
+    if (value.length() > TEXT_MAX_LENGTH || lob_handler_ == nullptr) {
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
+
+    LobReference ref;
+    ref.length = value.length();
+    RC rc      = lob_handler_->insert_data(ref.offset, ref.length, value.data());
+    if (OB_FAIL(rc)) {
+      return rc;
+    }
+    memcpy(record_data + field->offset(), &ref, sizeof(ref));
+    return RC::SUCCESS;
+  }
+
   size_t       copy_len = field->len();
   const size_t data_len = value.length();
   if (field->type() == AttrType::CHARS) {
@@ -280,6 +331,35 @@ RC Table::set_value_to_record(char *record_data, const Value &value, const Field
     }
   }
   memcpy(record_data + field->offset(), value.data(), copy_len);
+  return RC::SUCCESS;
+}
+
+RC Table::get_text_value(const char *record_data, const FieldMeta *field, Value &value) const
+{
+  if (field->type() != AttrType::TEXTS || field->len() != LOB_REFERENCE_SIZE || lob_handler_ == nullptr) {
+    return RC::INVALID_ARGUMENT;
+  }
+
+  const char *field_data = record_data + field->offset();
+  LobReference ref;
+  memcpy(&ref, field_data, sizeof(ref));
+  if (ref.length < 0) {
+    value.set_null();
+    return RC::SUCCESS;
+  }
+  if (ref.length > TEXT_MAX_LENGTH) {
+    return RC::INTERNAL;
+  }
+
+  string text;
+  text.resize(ref.length);
+  RC rc = lob_handler_->get_data(ref.offset, ref.length, text.data());
+  if (OB_FAIL(rc)) {
+    return rc;
+  }
+
+  value.set_string(text.data(), static_cast<int>(text.size()));
+  value.set_type(AttrType::TEXTS);
   return RC::SUCCESS;
 }
 
